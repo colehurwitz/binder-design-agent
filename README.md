@@ -7,6 +7,39 @@ running on serverless GPUs, and uses the models' own output to decide what to tr
 **Start here: [`Binder Design Agent.pptx`](./Binder%20Design%20Agent.pptx)** — the
 presentation, and the canonical summary of what was built and found.
 
+## The pipeline
+
+Five MCP tool calls, each a real model running on a Modal GPU:
+
+```
+INPUT   target PDB + hotspot residues
+           │
+           ▼
+1. design_binder      RFdiffusion    →  candidate 3D backbones (shape only, no sequence)
+                       │ conditioned on target + hotspots
+                       ▼
+2.                     ProteinMPNN    →  amino acid sequence for that backbone
+                       │ (inverse folding)
+                       ▼
+3.                     ESMFold        →  refold the sequence ALONE (no target)
+                       │                 → pLDDT, pTM  (self-score / monomer confidence)
+                       ▼
+4. (agent/human)       filter         →  drop weak candidates by self-score
+                       │
+                       ▼
+5. predict_complex     AlphaFold2-    →  fold binder + target TOGETHER, different model
+                       Multimer          → ipTM, interface pAE  (independent verification)
+                       ▼
+OUTPUT  ranked candidate(s): sequence + predicted complex + independent confidence scores
+```
+
+Steps 1–4 share one model family (ESMFold) for both generation and self-scoring — a
+binder can score well there just by being a stable, well-folded shape, whether or not it
+actually binds anything. Step 5 uses a completely different model to check the thing
+steps 1–4 can't: does it dock against the real target. That's the gap the whole project
+is about — see the deck and `TECHNICAL_APPENDIX.md` for a run where step 5 overturned a
+confident-looking step 1–4 result.
+
 ## Headline result
 
 Ran against a real target (PD-L1, PDB 4ZQK) with hotspots derived directly from the
