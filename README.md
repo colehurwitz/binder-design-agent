@@ -6,29 +6,31 @@ running on serverless GPUs, and uses the models' own output to decide what to tr
 
 ## The pipeline
 
-Five MCP tool calls, each a real model running on a Modal GPU:
+Five MCP tool calls, each a real model running on a Modal GPU.
 
-```
-INPUT   target PDB + hotspot residues
-           │
-           ▼
-1. design_binder      RFdiffusion    →  candidate 3D backbones (shape only, no sequence)
-                       │ conditioned on target + hotspots
-                       ▼
-2.                     ProteinMPNN    →  amino acid sequence for that backbone
-                       │ (inverse folding)
-                       ▼
-3.                     ESMFold        →  refold the sequence ALONE (no target)
-                       │                 → pLDDT, pTM  (self-score / monomer confidence)
-                       ▼
-4. (agent/human)       filter         →  drop weak candidates by self-score
-                       │
-                       ▼
-5. predict_complex     AlphaFold2-    →  fold binder + target TOGETHER, different model
-                       Multimer          → ipTM, interface pAE  (independent verification)
-                       ▼
-OUTPUT  ranked candidate(s): sequence + predicted complex + independent confidence scores
-```
+**Input:** target PDB + hotspot residues (the specific spot on the target the binder
+should attach to)
+
+---
+
+**1. Generate a backbone shape — RFdiffusion**
+&nbsp;&nbsp;&nbsp;&nbsp;`design_binder` → candidate 3D backbones (shape only, no sequence yet), conditioned on the target + hotspots
+
+**2. Design a sequence for it — ProteinMPNN**
+&nbsp;&nbsp;&nbsp;&nbsp;inverse folding → an amino acid sequence predicted to fold into that backbone
+
+**3. Check it folds on its own — ESMFold**
+&nbsp;&nbsp;&nbsp;&nbsp;refolds the sequence *alone*, target removed → pLDDT, pTM (self-score / monomer confidence)
+
+**4. Filter — agent or human**
+&nbsp;&nbsp;&nbsp;&nbsp;drop weak candidates by self-score before spending GPU time on the expensive step below
+
+**5. Predict the real complex — AlphaFold2-Multimer**
+&nbsp;&nbsp;&nbsp;&nbsp;`predict_complex` → folds binder + target *together*, using a different model than steps 1–3 → ipTM, interface pAE (independent verification)
+
+---
+
+**Output:** a ranked candidate — sequence, predicted complex structure, and independent confidence scores
 
 Steps 1–4 share one model family (ESMFold) for both generation and self-scoring — a
 binder can score well there just by being a stable, well-folded shape, whether or not it
