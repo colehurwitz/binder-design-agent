@@ -20,8 +20,8 @@ point where step 5 fails and something has to happen next:
  └──────────────────────────────────────────────────────────┘
    │
    ▼
- ┌──────────────────────────────────────────────────────────┐     ┐
- │ 2  PROTEINMPNN          inverse folding                  │     │
+ ┌──────────────────────────────────────────────────────────┐
+ │ 2  PROTEINMPNN          inverse folding                  │◀────┐
  │    sequence predicted to fold into                       │     │
  │    that backbone                                         │     │
  └──────────────────────────────────────────────────────────┘     │
