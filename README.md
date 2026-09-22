@@ -6,70 +6,76 @@ running on serverless GPUs, and uses the models' own output to decide what to tr
 
 ## The pipeline
 
-Five MCP tool calls, each a real model running on a Modal GPU.
+Five MCP tool calls, each a real model running on a Modal GPU — plus the agent decision
+point where step 5 fails and something has to happen next:
 
-**Input:** target PDB + hotspot residues (the specific spot on the target the binder
-should attach to)
-
----
-
-**1. Generate a backbone shape — RFdiffusion**
-&nbsp;&nbsp;&nbsp;&nbsp;`design_binder` → candidate 3D backbones (shape only, no sequence yet), conditioned on the target + hotspots
-
-**2. Design a sequence for it — ProteinMPNN**
-&nbsp;&nbsp;&nbsp;&nbsp;inverse folding → an amino acid sequence predicted to fold into that backbone
-
-**3. Check it folds on its own — ESMFold**
-&nbsp;&nbsp;&nbsp;&nbsp;refolds the sequence *alone*, target removed → pLDDT, pTM (self-score / monomer confidence)
-
-**4. Filter — agent or human**
-&nbsp;&nbsp;&nbsp;&nbsp;drop weak candidates by self-score before spending GPU time on the expensive step below
-
-**5. Predict the real complex — AlphaFold2-Multimer**
-&nbsp;&nbsp;&nbsp;&nbsp;`predict_complex` → folds binder + target *together*, using a different model than steps 1–3 → ipTM, interface pAE (independent verification)
-
----
-
-**Output:** a ranked candidate — sequence, predicted complex structure, and independent confidence scores
+```
+ INPUT: target PDB + hotspot residues
+   │
+   ▼
+ ┌───────────────────────────────────────────────────────┐
+ │ 1  RFDIFFUSION            design_binder                │
+ │    candidate 3D backbones, shape only, conditioned      │
+ │    on the target + hotspots                             │
+ └───────────────────────────────────────────────────────┘
+   │
+   ▼
+ ┌───────────────────────────────────────────────────────┐
+ │ 2  PROTEINMPNN            inverse folding               │◀─────┐
+ │    amino acid sequence predicted to fold into that       │      │
+ │    backbone                                              │      │
+ └───────────────────────────────────────────────────────┘        │
+   │                                                               │
+   ▼                                                               │
+ ┌───────────────────────────────────────────────────────┐        │
+ │ 3  ESMFOLD                refold sequence ALONE          │      │
+ │    target removed → pLDDT, pTM                          │      │
+ │    (self-score / monomer confidence)                     │      │
+ └───────────────────────────────────────────────────────┘        │
+   │                                                               │
+   ▼                                                               │
+ ┌───────────────────────────────────────────────────────┐        │
+ │ 4  FILTER                 agent or human                │      │
+ │    drop weak candidates by self-score before the         │      │
+ │    expensive step below                                  │      │
+ └───────────────────────────────────────────────────────┘        │
+   │                                                               │
+   ▼                                                               │
+ ┌───────────────────────────────────────────────────────┐        │
+ │ 5  ALPHAFOLD2-MULTIMER    predict_complex                │      │
+ │    binder + target folded TOGETHER, a different model    │      │
+ │    than steps 1–3 → ipTM, interface pAE                  │      │
+ │    (independent verification)                            │      │
+ └───────────────────────────────────────────────────────┘        │
+   │                                                               │
+   ▼                                                               │
+ PASSES THRESHOLD? (ipTM > 0.8, interface pAE < 10)                │
+   │                                                               │
+   ├── yes ──▶ OUTPUT: sequence + predicted complex +              │
+   │           independent confidence scores                      │
+   │                                                               │
+   └── no ───▶ AGENT reads the full per-residue PAE matrix,        │
+               not just the summary score — finds which            │
+               binder residues already confidently contact         │
+               the target, and which don't. Decides: refine        │
+               (lock the working residues, redesign the rest)      │
+               or discard and try a fresh backbone or another       │
+               candidate from the same batch.                      │
+                       │                                            │
+                       └── loops back to step 2 (or step 1) ────────┘
+                           then re-runs step 5 on the result
+```
 
 Steps 1–4 share one model family (ESMFold) for both generation and self-scoring — a
 binder can score well there just by being a stable, well-folded shape, whether or not it
 actually binds anything. Step 5 uses a completely different model to check the thing
-steps 1–4 can't: does it dock against the real target. That's the gap the whole project
-is about — see the deck and `TECHNICAL_APPENDIX.md` for a run where step 5 overturned a
-confident-looking step 1–4 result.
+steps 1–4 can't: does it dock against the real target. That gap — and the loop-back it
+forces — is what the whole project is about.
 
-### Where the agent comes in, and where it loops back
-
-The five steps above are a straight line. The agent's actual job starts when step 5
-comes back bad — deciding what to do about it, which isn't a fixed rule:
-
-```
-        ┌────────────────────────────────────────────────────────────┐
-        │                                                            │
-        ▼                                                            │
-  Step 5 result (ipTM, interface pAE)                                │
-        │                                                            │
-        ▼                                                            │
-  Agent reads the FULL per-residue PAE matrix, not just the          │
-  summary score — finds which specific binder residues are already   │
-  confidently contacting the target, and which aren't                │
-        │                                                            │
-        ▼                                                            │
-  Agent decides: refine (lock the working residues, redesign the     │
-  rest) vs. discard and generate a fresh backbone vs. try a           │
-  different candidate from the same batch                            │
-        │                                                            │
-        ▼                                                            │
-  Loops back to Step 2 (optimize_sequence, targeted) ──────────────────┘
-  or Step 1 (fresh design_binder call), then re-runs Step 5 to
-  independently re-check the new candidate
-```
-
-This loop is what actually happened in the run this repo documents: candidate #3 failed
-step 5 (ipTM 0.43), the agent read the PAE matrix, found a real partial contact on
-Met115, looped back to step 2 with that residue range locked, and re-ran step 5 on the
-result (ipTM 0.55). See `TECHNICAL_APPENDIX.md` sections 3–5 for the exact calls.
+**What actually happened in this repo's run:** candidate #3 failed step 5 (ipTM 0.43).
+The agent read the PAE matrix, found a real partial contact on Met115, looped back to
+step 2 with that residue range locked, and re-ran step 5 on the result (ipTM 0.55). See
+`TECHNICAL_APPENDIX.md` sections 3–5 for the exact calls.
 
 **Important caveat:** in this run, every step of that loop — reading the matrix,
 deciding to refine rather than discard, choosing which residues to lock — was done
