@@ -13,57 +13,56 @@ point where step 5 fails and something has to happen next:
  INPUT: target PDB + hotspot residues
    │
    ▼
- ┌───────────────────────────────────────────────────────┐
- │ 1  RFDIFFUSION            design_binder                │
- │    candidate 3D backbones, shape only, conditioned      │
- │    on the target + hotspots                             │
- └───────────────────────────────────────────────────────┘
+ ┌──────────────────────────────────────────────────────────┐
+ │ 1  RFDIFFUSION          design_binder                    │
+ │    candidate 3D backbones, shape only,                   │
+ │    conditioned on target + hotspots                      │
+ └──────────────────────────────────────────────────────────┘
    │
    ▼
- ┌───────────────────────────────────────────────────────┐
- │ 2  PROTEINMPNN            inverse folding               │◀─────┐
- │    amino acid sequence predicted to fold into that       │      │
- │    backbone                                              │      │
- └───────────────────────────────────────────────────────┘        │
-   │                                                               │
-   ▼                                                               │
- ┌───────────────────────────────────────────────────────┐        │
- │ 3  ESMFOLD                refold sequence ALONE          │      │
- │    target removed → pLDDT, pTM                          │      │
- │    (self-score / monomer confidence)                     │      │
- └───────────────────────────────────────────────────────┘        │
-   │                                                               │
-   ▼                                                               │
- ┌───────────────────────────────────────────────────────┐        │
- │ 4  FILTER                 agent or human                │      │
- │    drop weak candidates by self-score before the         │      │
- │    expensive step below                                  │      │
- └───────────────────────────────────────────────────────┘        │
-   │                                                               │
-   ▼                                                               │
- ┌───────────────────────────────────────────────────────┐        │
- │ 5  ALPHAFOLD2-MULTIMER    predict_complex                │      │
- │    binder + target folded TOGETHER, a different model    │      │
- │    than steps 1–3 → ipTM, interface pAE                  │      │
- │    (independent verification)                            │      │
- └───────────────────────────────────────────────────────┘        │
-   │                                                               │
-   ▼                                                               │
- PASSES THRESHOLD? (ipTM > 0.8, interface pAE < 10)                │
-   │                                                               │
-   ├── yes ──▶ OUTPUT: sequence + predicted complex +              │
+ ┌──────────────────────────────────────────────────────────┐     ┐
+ │ 2  PROTEINMPNN          inverse folding                  │     │
+ │    sequence predicted to fold into                       │     │
+ │    that backbone                                         │     │
+ └──────────────────────────────────────────────────────────┘     │
+   │                                                              │
+   ▼                                                              │
+ ┌──────────────────────────────────────────────────────────┐     │
+ │ 3  ESMFOLD              refold ALONE                     │     │
+ │    target removed -> pLDDT, pTM                          │     │
+ │    (self-score / monomer confidence)                     │     │
+ └──────────────────────────────────────────────────────────┘     │
+   │                                                              │
+   ▼                                                              │
+ ┌──────────────────────────────────────────────────────────┐     │
+ │ 4  FILTER               agent or human                   │     │
+ │    drop weak candidates by self-score                    │     │
+ └──────────────────────────────────────────────────────────┘     │
+   │                                                              │
+   ▼                                                              │
+ ┌──────────────────────────────────────────────────────────┐     │
+ │ 5  ALPHAFOLD2-MULTIMER  predict_complex                  │     │
+ │    binder+target folded TOGETHER, a                      │     │
+ │    different model -> ipTM, interface                    │     │
+ │    pAE (independent verification)                        │     │
+ └──────────────────────────────────────────────────────────┘     │
+   │                                                              │
+   ▼                                                              │
+ PASSES THRESHOLD? (ipTM > 0.8, interface pAE < 10)               │
+   │                                                              │
+   ├── yes --> OUTPUT: sequence + predicted complex +             │
    │           independent confidence scores                      │
-   │                                                               │
-   └── no ───▶ AGENT reads the full per-residue PAE matrix,        │
-               not just the summary score — finds which            │
-               binder residues already confidently contact         │
-               the target, and which don't. Decides: refine        │
-               (lock the working residues, redesign the rest)      │
-               or discard and try a fresh backbone or another       │
-               candidate from the same batch.                      │
-                       │                                            │
-                       └── loops back to step 2 (or step 1) ────────┘
-                           then re-runs step 5 on the result
+   │                                                              │
+   └── no  --> AGENT reads the full per-residue PAE               │
+               matrix, not just the summary score --              │
+               finds which binder residues already                │
+               contact the target and which don't.                │
+               Decides: refine (lock what works,                  │
+               redesign the rest) or discard and try              │
+               a fresh backbone / another candidate.              │
+                       │                                          │
+                       └─────────────────────────────────────────┘
+                           (or step 1), re-runs step 5
 ```
 
 Steps 1–4 share one model family (ESMFold) for both generation and self-scoring — a
