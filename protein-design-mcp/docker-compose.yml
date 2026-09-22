@@ -1,0 +1,103 @@
+# Docker Compose for Protein Design MCP Server
+#
+# GPU mode (default):
+#   docker-compose up
+#
+# CPU mode (no GPU required):
+#   docker-compose --profile cpu up
+#   OR: DEVICE=cpu docker-compose up protein-design
+#
+# Commands:
+#   docker-compose up                          # Start MCP server (GPU)
+#   docker-compose run --rm protein-design bash # Interactive shell
+#   docker-compose run --rm download-models     # Download models only
+
+services:
+  # --- GPU mode (default) ---
+  protein-design:
+    image: ghcr.io/jasonkim8652/protein-design-mcp:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+    volumes:
+      - ./models:/models
+      - ./data:/data
+      - ./cache:/cache
+
+    stdin_open: true
+    tty: true
+
+    environment:
+      - MODELS_DIR=/models
+      - CACHE_DIR=/cache
+      - DEVICE=${DEVICE:-auto}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+
+  # --- CPU mode (no GPU required) ---
+  protein-design-cpu:
+    image: ghcr.io/jasonkim8652/protein-design-mcp:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    profiles:
+      - cpu
+
+    # No GPU reservation
+    volumes:
+      - ./models:/models
+      - ./data:/data
+      - ./cache:/cache
+
+    stdin_open: true
+    tty: true
+
+    environment:
+      - MODELS_DIR=/models
+      - CACHE_DIR=/cache
+      - DEVICE=cpu
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+
+  # --- Lite CPU-only image (smaller, no CUDA) ---
+  protein-design-lite:
+    image: ghcr.io/jasonkim8652/protein-design-mcp:lite
+    build:
+      context: .
+      dockerfile: Dockerfile.lite
+    profiles:
+      - lite
+
+    # No GPU reservation
+    volumes:
+      - ./models:/models
+      - ./data:/data
+      - ./cache:/cache
+
+    stdin_open: true
+    tty: true
+
+    environment:
+      - MODELS_DIR=/models
+      - CACHE_DIR=/cache
+      - DEVICE=cpu
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+
+  # --- Download models only ---
+  download-models:
+    image: ghcr.io/jasonkim8652/protein-design-mcp:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: download
+    profiles:
+      - setup
+    volumes:
+      - ./models:/models

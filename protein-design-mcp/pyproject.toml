@@ -1,0 +1,126 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "protein-design-mcp"
+version = "1.0.0"
+description = "MCP server for protein design: RFdiffusion, ProteinMPNN, ESMFold, AlphaFold2, Boltz, PyRosetta, ESM2, OpenMM"
+readme = "README.md"
+license = {text = "Apache-2.0"}
+requires-python = ">=3.10"
+authors = [
+    {name = "Protein Design MCP Team"}
+]
+keywords = [
+    "mcp",
+    "protein-design",
+    "rfdiffusion",
+    "proteinmpnn",
+    "esmfold",
+    "alphafold2",
+    "boltz",
+    "pyrosetta",
+    "llm",
+    "ai",
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+]
+
+dependencies = [
+    "mcp>=1.0.0,<2.0.0",
+    "numpy>=1.24",
+    "biopython>=1.81",
+    "aiofiles>=23.0",
+    "pyyaml>=6.0",
+    "tqdm>=4.65",
+]
+
+[project.optional-dependencies]
+gpu = [
+    "torch>=2.0",
+    "fair-esm>=2.0.0",
+]
+# PyRosetta tools (rosetta_score, rosetta_relax, rosetta_interface_score, rosetta_design).
+# PyRosetta requires a free academic or paid commercial license from RosettaCommons
+# and is distributed via a custom wheel index. See:
+#   https://www.pyrosetta.org/downloads
+# Install example (academic):
+#   pip install pyrosetta-installer && python -c "import pyrosetta_installer; pyrosetta_installer.install_pyrosetta()"
+# (Listed here for documentation; pip cannot resolve it from PyPI.)
+rosetta = [
+    "pyrosetta-installer>=0.1",
+]
+# Boltz-2 structure + affinity prediction (predict_structure_boltz, predict_affinity_boltz).
+# Requires torch>=2.2 which conflicts with RFdiffusion's torch==2.0.1 stack —
+# install in an isolated virtualenv, not alongside [gpu].
+boltz = [
+    "boltz>=2.0.0",
+]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "pytest-asyncio>=0.21",
+    "ruff>=0.1.0",
+    "black>=23.0",
+    "mypy>=1.0",
+]
+
+[project.scripts]
+protein-design-mcp = "protein_design_mcp:main"
+protein-design-mcp-setup = "protein_design_mcp.setup_cli:main"
+protein-design-mcp-modal = "protein_design_mcp.modal_proxy:main"
+
+[project.urls]
+Homepage = "https://github.com/jasonkim8652/protein-design-mcp"
+Documentation = "https://github.com/jasonkim8652/protein-design-mcp#readme"
+Repository = "https://github.com/jasonkim8652/protein-design-mcp"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-dir]
+"" = "src"
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # pyflakes
+    "I",      # isort
+    "B",      # flake8-bugbear
+    "C4",     # flake8-comprehensions
+    "UP",     # pyupgrade
+]
+ignore = [
+    "E501",   # line too long (handled by formatter)
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["protein_design_mcp"]
+
+[tool.black]
+line-length = 100
+target-version = ["py310"]
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_ignores = true
+disallow_untyped_defs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = "-v --tb=short"

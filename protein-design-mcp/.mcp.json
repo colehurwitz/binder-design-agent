@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "protein-design": {
+      "type": "stdio",
+      "command": "python3",
+      "args": ["-m", "protein_design_mcp.modal_proxy"],
+      "env": {
+        "MODAL_URL": "https://colehurwitz--protein-design-tools.modal.run"
+      }
+    }
+  }
+}
