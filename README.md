@@ -4,9 +4,6 @@ Hackathon project: an AI agent (Claude, via Claude Code) that drives a real prot
 binder design pipeline — RFdiffusion → ProteinMPNN → ESMFold → AlphaFold2-Multimer —
 running on serverless GPUs, and uses the models' own output to decide what to try next.
 
-**Start here: [`Binder Design Agent.pptx`](./Binder%20Design%20Agent.pptx)** — the
-presentation, and the canonical summary of what was built and found.
-
 ## The pipeline
 
 Five MCP tool calls, each a real model running on a Modal GPU:
@@ -39,6 +36,9 @@ actually binds anything. Step 5 uses a completely different model to check the t
 steps 1–4 can't: does it dock against the real target. That's the gap the whole project
 is about — see the deck and `TECHNICAL_APPENDIX.md` for a run where step 5 overturned a
 confident-looking step 1–4 result.
+
+**Start here: [`Binder Design Agent.pptx`](./Binder%20Design%20Agent.pptx)** — the
+presentation, and the canonical summary of what was built and found.
 
 ## Headline result
 
