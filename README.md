@@ -39,6 +39,45 @@ steps 1–4 can't: does it dock against the real target. That's the gap the whol
 is about — see the deck and `TECHNICAL_APPENDIX.md` for a run where step 5 overturned a
 confident-looking step 1–4 result.
 
+### Where the agent comes in, and where it loops back
+
+The five steps above are a straight line. The agent's actual job starts when step 5
+comes back bad — deciding what to do about it, which isn't a fixed rule:
+
+```
+        ┌────────────────────────────────────────────────────────────┐
+        │                                                            │
+        ▼                                                            │
+  Step 5 result (ipTM, interface pAE)                                │
+        │                                                            │
+        ▼                                                            │
+  Agent reads the FULL per-residue PAE matrix, not just the          │
+  summary score — finds which specific binder residues are already   │
+  confidently contacting the target, and which aren't                │
+        │                                                            │
+        ▼                                                            │
+  Agent decides: refine (lock the working residues, redesign the     │
+  rest) vs. discard and generate a fresh backbone vs. try a           │
+  different candidate from the same batch                            │
+        │                                                            │
+        ▼                                                            │
+  Loops back to Step 2 (optimize_sequence, targeted) ──────────────────┘
+  or Step 1 (fresh design_binder call), then re-runs Step 5 to
+  independently re-check the new candidate
+```
+
+This loop is what actually happened in the run this repo documents: candidate #3 failed
+step 5 (ipTM 0.43), the agent read the PAE matrix, found a real partial contact on
+Met115, looped back to step 2 with that residue range locked, and re-ran step 5 on the
+result (ipTM 0.55). See `TECHNICAL_APPENDIX.md` sections 3–5 for the exact calls.
+
+**Important caveat:** in this run, every step of that loop — reading the matrix,
+deciding to refine rather than discard, choosing which residues to lock — was done
+interactively, by a human directing the agent through each decision, not by the agent
+running the loop on its own. The deck is explicit about this. Whether an agent can make
+these calls autonomously, and whether doing so beats a fixed parameter sweep at equal
+compute budget, is the open question this project sets up but doesn't answer.
+
 **Start here: [`Binder Design Agent.pptx`](./Binder%20Design%20Agent.pptx)** — the
 presentation, and the canonical summary of what was built and found.
 
