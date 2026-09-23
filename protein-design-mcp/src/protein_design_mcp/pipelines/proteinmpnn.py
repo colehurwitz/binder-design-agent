@@ -296,55 +296,117 @@ class ProteinMPNNRunner:
         # Parse and return results
         return self._parse_outputs(str(output_path))
 
+    async def _run_helper_script(self, cmd: list[str]) -> None:
+        """Run one of ProteinMPNN's own helper_scripts/ preprocessing steps."""
+        process = await asyncio.create_subprocess_exec(
+            *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+        )
+        stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=120)
+        if process.returncode != 0:
+            raise ProteinMPNNError(
+                f"ProteinMPNN helper script failed with code {process.returncode}: "
+                f"{stderr.decode()}"
+            )
+
     async def design_for_interface(
         self,
         complex_pdb: str,
         design_chain: str,
         interface_residues: list[str],
         output_dir: str,
+        fixed_positions: list[int] | None = None,
     ) -> list[dict[str, Any]]:
         """
-        Design sequences optimized for an interface.
+        Design sequences for one chain of a complex, keeping the other
+        chain(s) fixed -- e.g. redesign a binder chain while leaving the
+        target chain exactly as given.
+
+        Uses ProteinMPNN's own documented multi-chain workflow
+        (helper_scripts/parse_multiple_chains.py -> assign_fixed_chains.py
+        -> [make_fixed_positions_dict.py]), NOT the single-PDB `--pdb_path`
+        mode -- that mode has no way to mark other chains as fixed, so a
+        naive `--pdb_path` + `--chain_id_design` call (this method's
+        previous implementation) fails outright: `--chain_id_design` is not
+        a real flag on this ProteinMPNN CLI (confirmed against its own
+        --help; the real flags are --pdb_path_chains for single-PDB mode,
+        or --chain_id_jsonl/--fixed_positions_jsonl for the parsed-jsonl
+        mode used here).
 
         Args:
-            complex_pdb: Path to protein complex PDB
-            design_chain: Chain to redesign
-            interface_residues: Interface residues to prioritize
+            complex_pdb: Path to protein complex PDB (target + binder chains)
+            design_chain: Chain ID to redesign; every other chain in
+                complex_pdb is left fixed
+            interface_residues: Interface residues to prioritize. NOTE:
+                accepted but not currently used -- kept for API
+                compatibility with callers. Use `fixed_positions` for
+                actual position-level control.
             output_dir: Output directory
+            fixed_positions: Positions within `design_chain` to also hold
+                fixed (1-indexed into that chain's sequence), letting
+                ProteinMPNN redesign only the remaining positions in that
+                chain.
 
         Returns:
             List of designed sequences with scores
         """
-        # Validate inputs
         complex_path = Path(complex_pdb)
         if not complex_path.exists():
             raise FileNotFoundError(f"Complex PDB not found: {complex_pdb}")
 
-        # Ensure weights are downloaded
         self._ensure_weights()
 
-        # Create output directory
         output_path = Path(output_dir)
         output_path.mkdir(parents=True, exist_ok=True)
+        helper_dir = self.config.proteinmpnn_path / "helper_scripts"
 
-        # For interface design, we typically want to:
-        # 1. Keep target chain fixed
-        # 2. Design only the binder chain
-        # 3. Consider interface context
+        # parse_multiple_chains.py wants a DIRECTORY of PDBs, not a file path
+        pdb_dir = output_path / "pdb_in"
+        pdb_dir.mkdir(exist_ok=True)
+        linked_pdb = pdb_dir / complex_path.name
+        if not linked_pdb.exists():
+            linked_pdb.symlink_to(complex_path.absolute())
+
+        parsed_jsonl = output_path / "parsed.jsonl"
+        await self._run_helper_script([
+            self.config.python_path, str(helper_dir / "parse_multiple_chains.py"),
+            "--input_path", str(pdb_dir),
+            "--output_path", str(parsed_jsonl),
+        ])
+
+        # Mark design_chain as the (only) chain to design; every other
+        # chain present (the target) is implicitly fixed
+        chains_jsonl = output_path / "chains_to_design.jsonl"
+        await self._run_helper_script([
+            self.config.python_path, str(helper_dir / "assign_fixed_chains.py"),
+            "--input_path", str(parsed_jsonl),
+            "--output_path", str(chains_jsonl),
+            "--chain_list", design_chain,
+        ])
+
+        extra_args: list[str] = []
+        if fixed_positions:
+            fixed_jsonl = output_path / "fixed_positions.jsonl"
+            await self._run_helper_script([
+                self.config.python_path, str(helper_dir / "make_fixed_positions_dict.py"),
+                "--input_path", str(parsed_jsonl),
+                "--output_path", str(fixed_jsonl),
+                "--chain_list", design_chain,
+                "--position_list", " ".join(str(p) for p in fixed_positions),
+            ])
+            extra_args = ["--fixed_positions_jsonl", str(fixed_jsonl)]
 
         script_path = self.config.proteinmpnn_path / "protein_mpnn_run.py"
-
         cmd = [
             self.config.python_path,
             str(script_path),
-            "--pdb_path", str(complex_path.absolute()),
+            "--jsonl_path", str(parsed_jsonl),
+            "--chain_id_jsonl", str(chains_jsonl),
             "--out_folder", str(output_path.absolute()),
             "--num_seq_per_target", str(self.config.num_sequences),
             "--sampling_temp", str(self.config.sampling_temp),
             "--model_name", self.config.model_name,
-            "--chain_id_design", design_chain,  # Only design this chain
             "--seed", "42",
-        ]
+        ] + extra_args
 
         await self._run_proteinmpnn(cmd, str(output_path))
 

@@ -84,28 +84,40 @@ these calls autonomously, and whether doing so beats a fixed parameter sweep at 
 compute budget, is the open question this project sets up but doesn't answer.
 
 **Start here: [`Binder Design Agent.pptx`](./Binder%20Design%20Agent.pptx)** — the
-presentation, and the canonical summary of what was built and found.
+presentation, and the canonical summary of what was built and found, including
+a mid-project retraction (an early refinement claim turned out to rest on a
+broken, non-target-aware tool) and the corrected results that followed.
+**[`RESULTS_UPDATE.md`](./RESULTS_UPDATE.md)** has the same corrected story in
+more detail, with exact reproducible values.
 
 ## Headline result
 
 Ran against a real target (PD-L1, PDB 4ZQK) with hotspots derived directly from the
-real PD-1/PD-L1 crystal contacts. Best candidate scored well on self-reported monomer
-metrics (pLDDT 93.5, pTM 0.85) but failed independent complex verification (ipTM 0.39
-vs. a 0.8 screening bar). A PAE-guided, targeted refinement improved that to ipTM 0.55 —
-still below threshold, and flagged with an open caveat (the refined sequence is
-unusually glutamate-rich, so the gain may be partly a model artifact rather than a real
-binding improvement — see the appendix).
+real PD-1/PD-L1 crystal contacts.
+
+An early result (best candidate: ipTM 0.39, "refined" to 0.55) was retracted
+after a code review found the refinement tool never actually used the
+target — see the deck or `RESULTS_UPDATE.md` for the full story. With that
+fixed, the corrected pipeline produced a real, reproduced, independently-verified
+**passing candidate: ipTM 0.81** (screening bar is 0.8), and clean tests of
+PAE-guided refinement on weaker candidates (+0.03 and +0.32 ipTM) — real
+effects, though not yet isolated from a simpler explanation (see the deck's
+final slides).
 
 No experimental binding data. This is a model-prediction pipeline and its results
 should be read as that, not as validated binder discovery.
 
 ## Repo layout
 
-- **`Binder Design Agent.pptx`** — the presentation. Primary artifact.
-- **`TECHNICAL_APPENDIX.md`** — full audit trail for the PAE-guided refinement result:
-  exact tool-call inputs/outputs, scripts, backend settings, and an explicit accounting
-  of which raw artifacts (predicted structures, full PAE matrices) were and weren't
-  preserved.
+- **`Binder Design Agent.pptx`** — the presentation, including the retraction
+  and corrected results.
+- **`RESULTS_UPDATE.md`** — corrected results after an external code review;
+  read this alongside or instead of the deck's refinement claim.
+- **`TECHNICAL_APPENDIX.md`** — full audit trail for the *original* (now
+  superseded) PAE-guided refinement result: exact tool-call inputs/outputs,
+  scripts, backend settings, and an explicit accounting of which raw
+  artifacts (predicted structures, full PAE matrices) were and weren't
+  preserved. Kept for transparency, not as the current headline.
 - **`protein-design-mcp/`** — vendored, patched clone of
   [`jasonkim8652/protein-design-mcp`](https://github.com/jasonkim8652/protein-design-mcp),
   the MCP server that wraps RFdiffusion/ProteinMPNN/ESMFold/AlphaFold2-Multimer and
@@ -113,9 +125,11 @@ should be read as that, not as validated binder discovery.
   below — this is not upstream-clean.
 - **`targets/`** — the real target structures used: `4zqk_full.pdb` (full PD-1/PD-L1
   co-crystal) and `pdl1_target.pdb` (PD-L1 chain A only, the actual design target).
-- **`debug/`** — the diagnostic scripts written to root-cause a real production hang
-  (JAX/XLA GPU memory allocator issue in `predict_complex`), kept for transparency
-  rather than deleted once the bug was found.
+- **`debug/`** — scripts kept for transparency rather than deleted: the
+  `_diag_*` scripts that root-caused a real production hang (JAX/XLA GPU
+  memory allocator issue in `predict_complex`), and the `_run_phase_*`
+  scripts used to find/fix the `design_for_interface` bugs and produce the
+  results in `RESULTS_UPDATE.md`.
 - **`drafts/`** — earlier presentation drafts, superseded by the `.pptx`. Kept for
   history, not canonical.
 
