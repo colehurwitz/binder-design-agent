@@ -71,10 +71,11 @@ actually binds anything. Step 5 uses a completely different model to check the t
 steps 1–4 can't: does it dock against the real target. That gap — and the loop-back it
 forces — is what the whole project is about.
 
-**What actually happened in this repo's run:** candidate #3 failed step 5 (ipTM 0.43).
-The agent read the PAE matrix, found a real partial contact on Met115, looped back to
-step 2 with that residue range locked, and re-ran step 5 on the result (ipTM 0.55). See
-`TECHNICAL_APPENDIX.md` sections 3–5 for the exact calls.
+**What actually happened in this repo's run:** candidate #7 failed step 5 (ipTM 0.45).
+The agent read the PAE matrix, found 32 of the 80 binder residues (40%) already
+confident against the target, looped back to step 2 with that region locked and the
+rest redesigned, and re-ran step 5 on the result (ipTM 0.77). See
+[`RESULTS_UPDATE.md`](./RESULTS_UPDATE.md) for the exact values.
 
 **Important caveat:** in this run, every step of that loop — reading the matrix,
 deciding to refine rather than discard, choosing which residues to lock — was done
@@ -103,6 +104,11 @@ fixed, the corrected pipeline produced a real, reproduced, independently-verifie
 PAE-guided refinement on weaker candidates (+0.03 and +0.32 ipTM) — real
 effects, though not yet isolated from a simpler explanation (see the deck's
 final slides).
+
+That 0.81 sequence is 61% charged (25 K, 22 E) with no aromatics and a three-fold
+C-terminal repeat — the idealized charged-helix pattern AlphaFold2-Multimer is known
+to score generously. It is also a single draw: six independent backbones in that
+session spanned ipTM 0.20 to 0.81.
 
 No experimental binding data. This is a model-prediction pipeline and its results
 should be read as that, not as validated binder discovery.
